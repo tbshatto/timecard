@@ -1,0 +1,128 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Shatto Timecard</title>
+  <style>
+    body { font-family: Arial; max-width: 500px; margin: 20px auto; }
+    h2 { text-align: center; }
+    label { display: block; margin: 10px 0 5px; }
+    input, select { width: 100%; padding: 8px; }
+    button { width: 100%; padding: 8px; background: green; color: white; border: none; }
+    #response { color: red; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h2>Timecard Entry</h2>
+  <form id="timecardForm" onsubmit="submitForm(event)">
+    <label for="employeeId">Employee ID:</label>
+    <select id="employeeId" required>
+      <option value="">Select Employee</option>
+      <option value="E001">E001 - Kirsten (FullTime)</option>
+      <option value="E002">E002 - Tracy (FullTime)</option>
+      <option value="E003">E003 - Amber (FullTime)</option>
+      <option value="E004">E004 - Ileasha (FullTime)</option>
+      <option value="E005">E005 - Paige (FullTime)</option>
+      <option value="E006">E006 - DawnEl (FullTime)</option>
+      <option value="E007">E007 - Calee (PartTime)</option>
+      <option value="E008">E008 - Daizey (PartTime)</option>
+      <option value="E009">E009 - Anna (PartTime)</option>
+      <option value="E010">E010 - Vickie (PartTime)</option>
+    </select>
+    <label for="date">Date:</label>
+    <input type="date" id="date" required>
+    <label for="hours">Hours:</label>
+    <input type="number" id="hours" step="0.01" min="0" required>
+    <label for="type" id="typeLabel">Type:</label>
+    <select id="type" required>
+      <option value="Regular">Regular</option>
+      <option value="Sick">Sick</option>
+      <option value="Vacation">Vacation</option>
+    </select>
+    <label for="notes">Notes:</label>
+    <input type="text" id="notes">
+    <button type="submit">Submit</button>
+    <p id="response"></p>
+  </form>
+  <script>
+    const holidays = [
+      '2025-07-04', '2025-09-01', '2025-11-27', '2025-12-25',
+      '2026-01-01', '2026-05-25', '2026-07-04', '2026-09-07',
+      '2026-11-26', '2026-12-25', '2027-01-01', '2027-05-31',
+      '2027-07-04', '2027-09-06', '2027-11-25', '2027-12-25',
+      '2028-01-01', '2028-05-29', '2028-07-04', '2028-09-04',
+      '2028-11-23', '2028-12-25', '2029-01-01', '2029-05-28',
+      '2029-07-04', '2029-09-03', '2029-11-22', '2029-12-25',
+      '2030-01-01', '2030-05-27', '2030-07-04', '2030-09-02',
+      '2030-11-28', '2030-12-25'
+    ];
+    const partTimeIds = ['E007', 'E008', 'E009', 'E010'];
+    function validateForm(id, date, hours, type) {
+      if (!id) return 'Select an Employee ID';
+      const inputDate = new Date(date);
+      if (isNaN(inputDate.getTime())) return 'Invalid date format';
+      if (inputDate.getDay() === 0 || inputDate.getDay() === 6) return 'Cannot enter hours on Saturday or Sunday';
+      if (holidays.includes(date)) return 'Cannot enter hours on holiday: ' + date;
+      if (hours <= 0) return 'Hours must be greater than 0';
+      if (partTimeIds.includes(id) && type !== 'Regular') return 'Part-time employees can only log Regular hours';
+      if (!partTimeIds.includes(id) && !['Regular', 'Sick', 'Vacation'].includes(type)) return 'Invalid type';
+      return '';
+    }
+    function updateTypeField() {
+      const id = document.getElementById('employeeId').value;
+      const typeLabel = document.getElementById('typeLabel');
+      const typeSelect = document.getElementById('type');
+      if (partTimeIds.includes(id)) {
+        typeLabel.classList.add('hidden');
+        typeSelect.classList.add('hidden');
+        typeSelect.value = 'Regular';
+      } else {
+        typeLabel.classList.remove('hidden');
+        typeSelect.classList.remove('hidden');
+      }
+    }
+    document.getElementById('employeeId').addEventListener('change', updateTypeField);
+    function submitForm(event) {
+      event.preventDefault();
+      const id = document.getElementById('employeeId').value;
+      const date = document.getElementById('date').value;
+      let hours = parseFloat(document.getElementById('hours').value);
+      const type = partTimeIds.includes(id) ? 'Regular' : document.getElementById('type').value;
+      const notes = document.getElementById('notes').value;
+      const response = document.getElementById('response');
+      response.innerText = 'Submitting...';
+      const error = validateForm(id, date, hours, type);
+      if (error) {
+        response.innerText = error;
+        return;
+      }
+      let entries = [];
+      if (partTimeIds.includes(id) || type !== 'Regular' || hours <= 8) {
+        entries.push({employeeId: id, date: date, hours: hours, type: partTimeIds.includes(id) ? 'Regular' : type, notes: notes});
+      } else {
+        entries.push({employeeId: id, date: date, hours: 8, type: 'Regular', notes: notes});
+        entries.push({employeeId: id, date: date, hours: hours - 8, type: 'Overtime', notes: notes + ' (Overtime)'});
+      }
+      Promise.all(entries.map(entry =>
+        fetch('https://script.google.com/macros/s/AKfycbypbSt6miPC6nn7vrM82cR7f_CmVnivtRal9Hl25hmubFaYJUDf5QzCIgVpI3f2j28FXA/exec', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(entry)
+        }).then(res => res.text())
+      ))
+      .then(results => {
+        if (results.every(data => data.indexOf('Error') === -1)) {
+          response.innerText = 'Entry added successfully';
+          document.getElementById('timecardForm').reset();
+          document.getElementById('typeLabel').classList.remove('hidden');
+          document.getElementById('type').classList.remove('hidden');
+        } else {
+          response.innerText = 'Error: ' + results.find(data => data.indexOf('Error') !== -1);
+        }
+      })
+      .catch(err => response.innerText = 'Error: ' + err);
+    }
+  </script>
+</body>
+</html>
