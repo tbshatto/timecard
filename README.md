@@ -1,2 +1,2 @@
-# timecard
+# Timecard
 Employee Timecard Hosting
